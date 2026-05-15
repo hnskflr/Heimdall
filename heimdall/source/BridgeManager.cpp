@@ -1111,46 +1111,55 @@ bool BridgeManager::SendFile(FILE *file, unsigned int destination, unsigned int 
 
 			if (!success)
 			{
-				Interface::PrintErrorSameLine("\n");
-				Interface::PrintError("Failed to receive file part response!\n");
-
-				for (int retry = 0; retry < 4; retry++)
+				if (filePartIndex == 0)
+				{
+					// Hack
+					success = true;
+					receivedPartIndex = filePartIndex;
+				}
+				else
 				{
 					Interface::PrintErrorSameLine("\n");
-					Interface::PrintError("Retrying...");
+					Interface::PrintError("Failed to receive file part response!\n");
 
-					// Send
-					sendFilePartPacket = new SendFilePartPacket(file, fileTransferPacketSize);
-					success = SendPacket(sendFilePartPacket, kDefaultTimeoutSend, sendEmptyTransferFlags);
-					delete sendFilePartPacket;
+					for (int retry = 0; retry < 4; ++retry)
+					{
+						Interface::PrintErrorSameLine("\n");
+						Interface::PrintError("Retrying...");
+
+						// Send
+						sendFilePartPacket = new SendFilePartPacket(file, fileTransferPacketSize);
+						success = SendPacket(sendFilePartPacket, kDefaultTimeoutSend, sendEmptyTransferFlags);
+						delete sendFilePartPacket;
+
+						if (!success)
+						{
+							Interface::PrintErrorSameLine("\n");
+							Interface::PrintError("Failed to send file part packet 2!\n");
+							return (false);
+						}
+
+						// Response
+						sendFilePartResponse = new SendFilePartResponse();
+						success = ReceivePacket(sendFilePartResponse);
+						unsigned int receivedPartIndex = sendFilePartResponse->GetPartIndex();
+
+						delete sendFilePartResponse;
+
+						if (receivedPartIndex != filePartIndex)
+						{
+							Interface::PrintErrorSameLine("\n");
+							Interface::PrintError("Expected file part index: %d Received: %d\n", filePartIndex, receivedPartIndex);
+							return (false);
+						}
+
+						if (success)
+							break;
+					}
 
 					if (!success)
-					{
-						Interface::PrintErrorSameLine("\n");
-						Interface::PrintError("Failed to send file part packet!\n");
 						return (false);
-					}
-
-					// Response
-					sendFilePartResponse = new SendFilePartResponse();
-					success = ReceivePacket(sendFilePartResponse);
-					unsigned int receivedPartIndex = sendFilePartResponse->GetPartIndex();
-
-					delete sendFilePartResponse;
-
-					if (receivedPartIndex != filePartIndex)
-					{
-						Interface::PrintErrorSameLine("\n");
-						Interface::PrintError("Expected file part index: %d Received: %d\n", filePartIndex, receivedPartIndex);
-						return (false);
-					}
-
-					if (success)
-						break;
 				}
-
-				if (!success)
-					return (false);
 			}
 
 			if (receivedPartIndex != filePartIndex)
